@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+
+import sys, os
+import gi
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gtk, Gio, GLib
+
+APP_ID = "org.jack.latency.updater"
+DEFAULT_LATENCY = "256"
+DEFAULT_RATE = "48000"
+CONF_FILE_STRING = "$HOME/.config/pipewire/jack.conf"
+
+
+def update_conf_file(conf_file_path, latency_rate):
+    latency_values = ["16", "32", "64", "128", "256", "512", "1024", "2048", "4096"]
+    rate_values = ["44100", "48000", "96000"]
+
+    if not latency_rate:
+        latency = DEFAULT_LATENCY
+        rate = DEFAULT_RATE
+        message = f"No input provided. Using defaults: {latency}/{rate}."
+    else:
+        values = latency_rate.split()
+        latency = values[0].strip()
+        if len(values) > 1:
+            rate = values[1].strip()
+        else:
+            rate = DEFAULT_RATE
+            message = f"No rate provided. Using default rate: {rate}."
+
+        if latency not in latency_values or rate not in rate_values:
+            latency = DEFAULT_LATENCY
+            rate = DEFAULT_RATE
+            message = f"Invalid input. Using defaults: {latency}/{rate}."
+        else:
+            message = f"Using: {latency}/{rate}."
+
+    conf_file_path = conf_file_path.replace("$HOME", os.path.expanduser("~"))
+
+    try:
+        with open(conf_file_path, "r") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        return False, f"Error: Configuration file '{conf_file_path}' not found."
+
+    updated_lines = []
+    updated_latency_line = False
+    inside_jack_properties = False
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("jack.properties") and "{" in stripped:
+            inside_jack_properties = True
+        elif inside_jack_properties and "}" in stripped:
+            inside_jack_properties = False
+
+        if inside_jack_properties and "node.latency" in stripped:
+            leading_ws = line[: len(line) - len(line.lstrip(" "))]
+            line = f"{leading_ws}node.latency       = {latency}/{rate}\n"
+            updated_latency_line = True
+
+        updated_lines.append(line)
+
+    if updated_latency_line:
+        with open(conf_file_path, "w") as f:
+            f.writelines(updated_lines)
+        return (
+            True,
+            f"Configuration updated successfully: node.latency = {latency}/{rate}",
+        )
+    else:
+        return (
+            False,
+            f"Warning: 'node.latency' not found in '{conf_file_path}'. No changes made.",
+        )
+
+
+def read_current_latency(conf_file_path):
+    """Leer el valor actual de node.latency desde el archivo de configuración."""
+    latency_val, rate_val = "", ""
+    try:
+        with open(conf_file_path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if "node.latency" in line and not line.startswith("#"):
+                    parts = line.split("=")[1].strip().split("/")
+                    latency_val = parts[0]
+                    rate_val = parts[1] if len(parts) > 1 else ""
+                    break
+    except FileNotFoundError:
+        pass
+    return latency_val, rate_val
+
+
+class LatencyApp(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+        self.window = None
+
+    def do_activate(self):
+        if not self.window:
+            self.build_ui()
+        self.window.present()
+
+    def build_ui(self):
+        self.window = Gtk.ApplicationWindow(application=self)
+        self.window.set_title("Jack Latency Updater")
+        self.window.set_default_size(420, 160)
+
+        v = Gtk.Box(
+            orientation=Gtk.Orientation.VERTICAL,
+            spacing=12,
+            margin_top=12,
+            margin_end=12,
+            margin_bottom=12,
+            margin_start=12,
+        )
+
+        grid = Gtk.Grid(column_spacing=8, row_spacing=8)
+        grid.set_halign(Gtk.Align.CENTER)
+        grid.set_valign(Gtk.Align.CENTER)
+
+        conf_file_path = os.path.join(
+            GLib.get_user_config_dir(), "pipewire", "jack.conf"
+        )
+        latency_val, rate_val = read_current_latency(conf_file_path)
+
+        latency_label = Gtk.Label(label="Latency (samples):", halign=Gtk.Align.START)
+        self.latency_entry = Gtk.Entry()
+        self.latency_entry.set_text(latency_val)
+        if not latency_val:
+            self.latency_entry.set_placeholder_text(DEFAULT_LATENCY)
+
+        rate_label = Gtk.Label(label="Rate (Hz):", halign=Gtk.Align.START)
+        self.rate_entry = Gtk.Entry()
+        self.rate_entry.set_text(rate_val)
+        if not rate_val:
+            self.rate_entry.set_placeholder_text(DEFAULT_RATE)
+
+        grid.attach(latency_label, 0, 0, 1, 1)
+        grid.attach(self.latency_entry, 1, 0, 1, 1)
+        grid.attach(rate_label, 0, 1, 1, 1)
+        grid.attach(self.rate_entry, 1, 1, 1, 1)
+
+        v.append(grid)
+
+        self.info_label = Gtk.Label(label="", xalign=0)
+        self.info_label.set_wrap(True)
+        v.append(self.info_label)
+
+        hbox = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        update_btn = Gtk.Button.new_with_label("Update Config")
+        update_btn.connect("clicked", self.on_update_clicked)
+        hbox.append(update_btn)
+
+        quit_btn = Gtk.Button.new_with_label("Quit")
+        quit_btn.connect("clicked", lambda *_: self.quit())
+        hbox.append(quit_btn)
+
+        hbox.set_halign(Gtk.Align.CENTER)
+        v.append(hbox)
+
+        self.window.set_child(v)
+
+    def on_update_clicked(self, _btn):
+        latency = self.latency_entry.get_text().strip()
+        rate = self.rate_entry.get_text().strip()
+
+        latency_rate = None
+        if latency and rate:
+            latency_rate = f"{latency} {rate}"
+        elif latency:
+            latency_rate = latency
+
+        conf_file_path = os.path.join(
+            GLib.get_user_config_dir(), "pipewire", "jack.conf"
+        )
+        ok, message = update_conf_file(conf_file_path, latency_rate)
+        self.info_label.set_text(message)
+
+        dialog = Gtk.MessageDialog(
+            transient_for=self.window,
+            message_type=Gtk.MessageType.INFO if ok else Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.OK,
+            text=f"Result: {message}",
+        )
+
+        dialog.connect("response", lambda d, r: d.destroy())
+        dialog.present()
+
+
+def main(argv):
+    app = LatencyApp()
+    return app.run(argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
