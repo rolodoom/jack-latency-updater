@@ -179,15 +179,15 @@ class LatencyApp(Gtk.Application):
         ok, message = update_conf_file(conf_file_path, latency_rate)
         self.info_label.set_text(message)
 
-        dialog = Gtk.MessageDialog(
-            transient_for=self.window,
-            message_type=Gtk.MessageType.INFO if ok else Gtk.MessageType.WARNING,
-            buttons=Gtk.ButtonsType.OK,
-            text=f"Result: {message}",
-        )
+        # dialog = Gtk.MessageDialog(
+        #     transient_for=self.window,
+        #     message_type=Gtk.MessageType.INFO if ok else Gtk.MessageType.WARNING,
+        #     buttons=Gtk.ButtonsType.OK,
+        #     text=f"Result: {message}",
+        # )
 
-        dialog.connect("response", lambda d, r: d.destroy())
-        dialog.present()
+        # dialog.connect("response", lambda d, r: d.destroy())
+        # dialog.present()
 
 
 def main(argv):
