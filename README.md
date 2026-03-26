@@ -2,6 +2,8 @@
 
 Update PipeWire jack.conf node.latency from a simple GUI
 
+![Jack Latency Updater](https://raw.githubusercontent.com/rolodoom/jack-latency-updater/master/screenshot.png)
+
 ## Status
 
 [![GitHub license](https://img.shields.io/badge/license-GPL--3.0-blue)](https://raw.githubusercontent.com/rolodoom/jack-latency-updater/master/LICENSE)
