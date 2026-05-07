@@ -17,7 +17,8 @@ sudo apt install python3-gi gir1.2-gtk-4.0
 ## Build .deb
 
 ```bash
-dpkg-deb --build --root-owner-group . jack-latency-updater_0.1-1_amd64.deb
+cd build
+dpkg-deb --build --root-owner-group . ../jack-latency-updater_0.1-1_amd64.deb
 ```
 
 ## Bugs and Issues
